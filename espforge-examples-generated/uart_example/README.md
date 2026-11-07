@@ -1,0 +1,70 @@
+# uart_example
+
+This example was generated from these source files.
+
+## `.espf.txt`
+
+```xml
+==================
+UART EXAMPLE
+==================
+
+# espforge
+  <project name="uart_example" />
+  <chip type="esp32c3" />
+  <runtime type="blocking" />
+
+# peripherals
+  <uart id="uart1" uart="UART1" tx="6" rx="5" />
+
+# components
+  <uart_component id="uart1_wokwi_chip" 
+                  uart="$uart1" baud_rate="9600" />
+
+# devices
+
+# services 
+
+
+
+
+```
+
+## `src/app.rs`
+
+```rust
+#[allow(unused_variables)]
+use crate::Context;
+
+pub fn setup(ctx: &mut Context) {
+    let logger = ctx.logger;
+    let uart = component!(ctx, uart1_wokwi_chip);
+
+    uart.write_str("Hello\n").expect("uart write failed");
+    logger.info("UART ready; type a line terminated by newline");
+}
+
+pub fn forever(ctx: &mut Context) {
+    let logger = ctx.logger;
+    let delay = ctx.delay;
+    let uart = component!(ctx, uart1_wokwi_chip);
+
+    // Line reading is backed by esp-hal's `read_buffered` + `\n` scan (§20.5).
+    // `read_line` fills `buf` until a newline (or it is full) and returns the
+    // number of bytes read.
+    let mut buf = [0u8; 64];
+    match uart.read_line(&mut buf) {
+        Ok(n) if n > 0 => {
+            logger.info("Received:");
+            logger.info(core::str::from_utf8(&buf[..n]).unwrap_or(""));
+            uart.write_str(core::str::from_utf8(&buf[..n]).unwrap_or(""))
+                .ok();
+        }
+        Ok(_) => {}
+        Err(_) => logger.info("UART read error"),
+    }
+
+    delay.delay_ms(10);
+}
+
+```

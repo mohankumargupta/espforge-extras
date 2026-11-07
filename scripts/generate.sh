@@ -5,54 +5,66 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_BASE="$ROOT_DIR/espforge-examples-generated"
 ESPFORGE_BIN="${ESPFORGE_BIN:-espforge}"
 
-# 1. Verify binary availability
 if ! command -v "$ESPFORGE_BIN" >/dev/null 2>&1; then
     echo "❌ Error: '$ESPFORGE_BIN' not found on PATH or via ESPFORGE_BIN." >&2
     exit 1
 fi
 
-echo "==> Binary: $(command -v "$ESPFORGE_BIN") ($("$ESPFORGE_BIN" --version))"
-echo "==> Target: $TARGET_BASE"
-
-# 2. Determine examples to generate
-# Allows passing a specific example name for testing (e.g. `./scripts/generate.sh blink`)
-if [ $# -ge 1 ] && [ -n "$1" ]; then
-    EXAMPLES=("$1")
-    echo "==> Target set to single example: '$1'"
-else
-    EXAMPLES=()
-    # Use --list if available; fallback to table parsing for older CLI versions
-    if "$ESPFORGE_BIN" examples --help 2>&1 | grep -E -q -- '--list|-l'; then
-        while IFS= read -r name; do
-            [[ -n "$name" ]] && EXAMPLES+=("$name")
-        done < <("$ESPFORGE_BIN" examples --list)
-    else
-        while IFS= read -r name; do
-            [[ -n "$name" ]] && EXAMPLES+=("$name")
-        done < <("$ESPFORGE_BIN" examples | awk '/^  [a-zA-Z0-9_]+/ {print $1}')
-    fi
-    echo "==> Discovered ${#EXAMPLES[@]} examples"
-fi
-
-if [ ${#EXAMPLES[@]} -eq 0 ]; then
-    echo "❌ Error: No examples discovered to generate." >&2
-    exit 1
-fi
+echo "==> Using $("$ESPFORGE_BIN" --version) ($(command -v "$ESPFORGE_BIN"))"
+echo "==> Target directory: $TARGET_BASE"
 
 mkdir -p "$TARGET_BASE"
 START_TIME=$(date +%s)
 FAILED=0
 
-# 3. Generate each project
-for example in "${EXAMPLES[@]}"; do
+# Helper to generate the minimal per-example README.md
+generate_example_readme() {
+    local ex_dir="$1"
+    local ex_name="$2"
+    local spec_file="$ex_dir/.espforge/source.espf.txt"
+    local app_file="$ex_dir/src/app.rs"
+    local readme_file="$ex_dir/README.md"
+
+    {
+        cat <<EOF
+# $ex_name
+
+This example was generated from these source files.
+
+## \`.espf.txt\`
+
+\`\`\`xml
+EOF
+        if [ -f "$spec_file" ]; then
+            cat "$spec_file"
+        fi
+        cat <<EOF
+
+\`\`\`
+
+## \`src/app.rs\`
+
+\`\`\`rust
+EOF
+        if [ -f "$app_file" ]; then
+            cat "$app_file"
+        fi
+        cat <<EOF
+
+\`\`\`
+EOF
+    } > "$readme_file"
+}
+
+# Stream example names directly from the CLI without switches
+for example in $("$ESPFORGE_BIN" examples --list); do
     echo -n "  • Generating $example... "
     OUT_DIR="$TARGET_BASE/$example"
 
-    # Clean existing directory for this specific project only
     rm -rf "$OUT_DIR"
 
-    # Capture output so errors are visible in CI/terminal logs on failure
     if OUTPUT=$("$ESPFORGE_BIN" gen --example "$example" --out "$OUT_DIR" 2>&1); then
+        generate_example_readme "$OUT_DIR" "$example"
         echo "✓"
     else
         echo "✗ FAILED"
@@ -63,10 +75,9 @@ done
 
 ELAPSED=$(( $(date +%s) - START_TIME ))
 
-# 4. Summary report
 if [ $FAILED -gt 0 ]; then
     echo "❌ Failed to generate $FAILED example(s) in ${ELAPSED}s" >&2
     exit 1
 fi
 
-echo "==> Successfully generated ${#EXAMPLES[@]} example(s) in ${ELAPSED}s"
+echo "==> Successfully generated examples in ${ELAPSED}s"
