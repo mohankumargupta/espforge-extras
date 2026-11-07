@@ -21,7 +21,7 @@ Companion repository providing pre-generated `no_std` Rust projects and interact
 | `ntp` | [`ntp`](./espforge-examples-generated/ntp) | — |
 | `spi_example` | [`spi_example`](./espforge-examples-generated/spi_example) | — |
 | `spi_example_async` | [`spi_example_async`](./espforge-examples-generated/spi_example_async) | — |
-| `ssd1306` | [`ssd1306`](./espforge-examples-generated/ssd1306) | — |
+| `ssd1306` | [`ssd1306`](./espforge-examples-generated/ssd1306) | [▶️ Run in Wokwi](https://wokwi.com/experimental/viewer?diagram=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fssd1306%2Fdiagram.json&firmware=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fssd1306%2Ffirmware.bin) |
 | `uart_example` | [`uart_example`](./espforge-examples-generated/uart_example) | — |
 | `uart_example_async` | [`uart_example_async`](./espforge-examples-generated/uart_example_async) | — |
 | `wifi_station` | [`wifi_station`](./espforge-examples-generated/wifi_station) | — |
