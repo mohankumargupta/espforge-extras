@@ -37,7 +37,7 @@ jobs:
           echo "Using espforge version: $VERSION"
 
       - name: Regenerate flat examples
-        run: sh ./scripts/generate.sh
+        run: bash ./scripts/generate.sh
 
       - name: Commit, Tag, and Push
         env:
