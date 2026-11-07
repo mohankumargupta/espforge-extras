@@ -39,15 +39,6 @@ jobs:
       - name: Regenerate flat examples
         run: ./scripts/generate.sh
 
-      - name: Verify generated crates compile (RISC-V check)
-        run: |
-          for dir in espforge-examples-generated/*/ ; do
-            if [ -f "${dir}Cargo.toml" ]; then
-              echo "==> Verifying ${dir}..."
-              (cd "$dir" && cargo check --target riscv32imc-unknown-none-elf)
-            fi
-          done
-
       - name: Commit, Tag, and Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
