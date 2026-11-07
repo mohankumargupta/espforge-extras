@@ -7,7 +7,7 @@ Companion repository providing pre-generated `no_std` Rust projects and interact
 | Example | Generated Source Code | Wokwi Simulation |
 |---|---|---|
 | `blink` | [`blink`](./espforge-examples-generated/blink) | [▶️ Run in Wokwi](https://wokwi.com/experimental/viewer?diagram=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fblink%2Fdiagram.json&firmware=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fblink%2Ffirmware.bin) |
-| `blink_async` | [`blink_async`](./espforge-examples-generated/blink_async) | — |
+| `blink_async` | [`blink_async`](./espforge-examples-generated/blink_async) | [▶️ Run in Wokwi](https://wokwi.com/experimental/viewer?diagram=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fblink_async%2Fdiagram.json&firmware=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fblink_async%2Ffirmware.bin) |
 | `button` | [`button`](./espforge-examples-generated/button) | — |
 | `button_async` | [`button_async`](./espforge-examples-generated/button_async) | — |
 | `helloworld` | [`helloworld`](./espforge-examples-generated/helloworld) | — |
