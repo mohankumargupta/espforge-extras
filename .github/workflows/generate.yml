@@ -1,0 +1,79 @@
+name: Generate & Verify Examples
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    name: Generate & Tag Examples
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout espforge-extras
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32imc-unknown-none-elf,riscv32imac-unknown-none-elf
+
+      - name: Install espforge (cargo-dist release with cargo install fallback)
+        run: |
+          echo "Attempting fast install via cargo-dist release..."
+          if curl --proto '=https' --tlsv1.2 -LsSf https://github.com/mohankumargupta/espforge/releases/latest/download/espforge-installer.sh | sh; then
+            echo "Installed pre-built binary via cargo-dist installer."
+          else
+            echo "cargo-dist release not found; compiling via cargo install..."
+            cargo install espforge --locked
+          fi
+
+      - name: Extract espforge version
+        run: |
+          VERSION=$(espforge --version | awk '{print $2}')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using espforge version: $VERSION"
+
+      - name: Regenerate flat examples
+        run: ./scripts/generate.sh
+
+      - name: Verify generated crates compile (RISC-V check)
+        run: |
+          for dir in espforge-examples-generated/*/ ; do
+            if [ -f "${dir}Cargo.toml" ]; then
+              echo "==> Verifying ${dir}..."
+              (cd "$dir" && cargo check --target riscv32imc-unknown-none-elf)
+            fi
+          done
+
+      - name: Commit, Tag, and Push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Only stage the generated examples folder; wokwi/ remains untouched
+          git add espforge-examples-generated/
+
+          if git diff --staged --quiet; then
+            echo "No file changes detected to commit."
+          else
+            git commit -m "chore: update generated examples to espforge v${VERSION}"
+            git push origin main
+          fi
+
+          # Tag matching the espforge version (e.g. v0.7.4)
+          TAG_NAME="v${VERSION}"
+          echo "==> Tagging release as $TAG_NAME..."
+          git tag -fa "$TAG_NAME" -m "espforge release $TAG_NAME"
+          git push origin "$TAG_NAME" --force
+
+          # Create matching GitHub Release
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" \
+              --title "espforge-extras $TAG_NAME" \
+              --notes "Generated standalone examples for espforge [$TAG_NAME](https://crates.io/crates/espforge/${VERSION})"
+          fi
