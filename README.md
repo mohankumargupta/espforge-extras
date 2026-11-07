@@ -16,7 +16,7 @@ Companion repository providing pre-generated `no_std` Rust projects and interact
 | `i2c_example` | [`i2c_example`](./espforge-examples-generated/i2c_example) | — |
 | `i2c_example_async` | [`i2c_example_async`](./espforge-examples-generated/i2c_example_async) | — |
 | `i2c_scanner` | [`i2c_scanner`](./espforge-examples-generated/i2c_scanner) | — |
-| `ili9341` | [`ili9341`](./espforge-examples-generated/ili9341) | — |
+| `ili9341` | [`ili9341`](./espforge-examples-generated/ili9341) | [▶️ Run in Wokwi](https://wokwi.com/experimental/viewer?diagram=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fili9341%2Fdiagram.json&firmware=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fili9341%2Ffirmware.bin) |
 | `minimal` | [`minimal`](./espforge-examples-generated/minimal) | [▶️ Run in Wokwi](https://wokwi.com/experimental/viewer?diagram=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fminimal%2Fdiagram.json&firmware=https%3A%2F%2Fraw.githubusercontent.com%2Fmohankumargupta%2Fespforge-extras%2Frefs%2Fheads%2Fmain%2Fwokwi%2Fminimal%2Ffirmware.bin) |
 | `ntp` | [`ntp`](./espforge-examples-generated/ntp) | — |
 | `spi_example` | [`spi_example`](./espforge-examples-generated/spi_example) | — |
