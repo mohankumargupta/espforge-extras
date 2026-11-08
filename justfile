@@ -43,3 +43,30 @@ all: generate check build readme
 clean build_dir=default_build_dir:
     @echo "==> [clean] Removing {{ build_dir }}..."
     rm -rf "{{ build_dir }}"
+
+# Dispatch a GitHub Action release for one custom chip (patch-bumps the newest chip-<example>-* tag)
+release-chip example:
+    @echo "==> Next chip tag will be: $(./scripts/chip-version.sh next-tag {{ example }})"
+    gh workflow run "Release Wokwi Custom Chip" -f example="{{ example }}"
+    @echo "✓ Triggered. Monitor with: gh run list --workflow='Release Wokwi Custom Chip'"
+
+# Dispatch releases for every chip example (scan the generated crates, not wokwi/)
+release-chips:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ./scripts/chip-version.sh fetch
+    echo "==> Releasing all chip examples..."
+    FOUND=0
+    for dir in espforge-examples-generated/*/ ; do
+        [ -d "$dir" ] || continue
+        [ -f "${dir}chip.json" ] && [ -f "${dir}chip.wasm" ] || continue
+        example="$(basename "$dir")"
+        echo "  • $example -> $(./scripts/chip-version.sh next-tag "$example")"
+        gh workflow run "Release Wokwi Custom Chip" -f example="$example"
+        FOUND=$((FOUND + 1))
+    done
+    if [ "$FOUND" -eq 0 ]; then
+        echo "❌ no chip examples found in espforge-examples-generated/" >&2
+        exit 1
+    fi
+    echo "==> Triggered $FOUND release(s)."

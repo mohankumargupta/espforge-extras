@@ -9,6 +9,10 @@ REPO_RAW_BASE="https://raw.githubusercontent.com/mohankumargupta/espforge-extras
 
 echo "==> Generating root README.md..."
 
+if [ "${CHIP_OFFLINE:-0}" != "1" ]; then
+    "$ROOT_DIR/scripts/chip-version.sh" fetch 2>/dev/null || true
+fi
+
 cat <<'EOF' > "$README_OUT"
 # espforge-extras
 
@@ -16,20 +20,37 @@ Companion repository providing pre-generated `no_std` Rust projects and interact
 
 ## Examples & Live Simulations
 
-| Example | Generated Source Code | Wokwi Simulation |
-|---|---|---|
+| Example | Generated Source Code | Wokwi Simulation | Chip |
+|---|---|---|---|
 EOF
 
-# Dynamically iterate over whatever directories exist in espforge-examples-generated/
 for dir in "$EXAMPLES_DIR"/*/ ; do
     [ -d "$dir" ] || continue
     example="$(basename "$dir")"
-
-    # Source code relative link
     SOURCE_LINK="[\`$example\`](./espforge-examples-generated/$example)"
 
-    # Simulation link: only generated if both diagram.json and firmware.bin exist
-    if [ -f "$WOKWI_DIR/$example/firmware.bin" ] && [ -f "$WOKWI_DIR/$example/diagram.json" ]; then
+    # Chip examples resolve their chip through diagram.json -> dependencies -> release asset.
+    IS_CHIP=0
+    CHIP_READY=1          # 0 = publish no simulation link for this row
+    PINNED_TAG=""
+    if [ -f "$EXAMPLES_DIR/$example/chip.json" ] && [ -f "$EXAMPLES_DIR/$example/chip.wasm" ]; then
+        IS_CHIP=1
+        PINNED_TAG="$("$ROOT_DIR/scripts/chip-version.sh" pinned "$example" 2>/dev/null || true)"
+        if [ -z "$PINNED_TAG" ]; then
+            CHIP_CELL="not pinned"
+            CHIP_READY=0
+        elif ! "$ROOT_DIR/scripts/chip-version.sh" exists "$PINNED_TAG" 2>/dev/null; then
+            CHIP_CELL="⚠️ \`$PINNED_TAG\` missing"
+            CHIP_READY=0
+        else
+            CHIP_CELL="[\`$PINNED_TAG\`](https://github.com/mohankumargupta/espforge-extras/releases/tag/$PINNED_TAG)"
+        fi
+    else
+        CHIP_CELL="—"
+    fi
+
+    if [ -f "$WOKWI_DIR/$example/firmware.bin" ] && [ -f "$WOKWI_DIR/$example/diagram.json" ] \
+       && [ "$CHIP_READY" -eq 1 ]; then
         RAW_DIAGRAM="${REPO_RAW_BASE}/wokwi/${example}/diagram.json"
         RAW_FIRMWARE="${REPO_RAW_BASE}/wokwi/${example}/firmware.bin"
 
@@ -41,7 +62,7 @@ for dir in "$EXAMPLES_DIR"/*/ ; do
         SIM_LINK="—"
     fi
 
-    echo "| \`$example\` | $SOURCE_LINK | $SIM_LINK |" >> "$README_OUT"
+    echo "| \`$example\` | $SOURCE_LINK | $SIM_LINK | $CHIP_CELL |" >> "$README_OUT"
 done
 
 echo "==> Wrote $README_OUT"

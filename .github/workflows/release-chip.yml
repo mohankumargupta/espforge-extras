@@ -1,0 +1,115 @@
+name: Release Wokwi Custom Chip
+
+on:
+  workflow_dispatch:
+    inputs:
+      example:
+        description: 'Example name (e.g. i2c_example)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# Two dispatches for the same chip must not compute the same next tag.
+concurrency:
+  group: release-chip-${{ inputs.example }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required: tag lookup needs the full tag list
+
+      - name: Validate input and locate chip sources
+        run: |
+          EXAMPLE="${{ inputs.example }}"
+          case "$EXAMPLE" in
+            '' | *[!a-z0-9_]*) echo "❌ invalid example name: '$EXAMPLE'" >&2; exit 1 ;;
+          esac
+
+          DIR="espforge-examples-generated/$EXAMPLE"
+          if [ ! -f "$DIR/chip.json" ] || [ ! -f "$DIR/chip.wasm" ]; then
+            echo "❌ $DIR has no chip.json/chip.wasm — is '$EXAMPLE' a chip example?" >&2
+            exit 1
+          fi
+
+          echo "EXAMPLE=$EXAMPLE" >> "$GITHUB_ENV"
+          echo "CHIP_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "✓ chip sources: $DIR"
+
+      - name: Compute next version from existing chip tags
+        run: |
+          chmod +x scripts/chip-version.sh
+          ./scripts/chip-version.sh fetch
+
+          VERSION="$(./scripts/chip-version.sh next "$EXAMPLE")"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=chip-${EXAMPLE}-${VERSION}" >> "$GITHUB_ENV"
+
+          echo "existing chip tags for $EXAMPLE:"
+          git tag -l "chip-${EXAMPLE}-*" | sort -V | sed 's/^/  /' || true
+          echo "→ next tag: chip-${EXAMPLE}-${VERSION}"
+
+      - name: Create tag and release with chip.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ( cd "$CHIP_DIR" && zip -j "$GITHUB_WORKSPACE/chip.zip" chip.json chip.wasm )
+          KEY="$(./scripts/chip-version.sh name "$EXAMPLE")"
+          gh release create "$RELEASE_TAG" "$GITHUB_WORKSPACE/chip.zip" \
+            --target "$GITHUB_SHA" \
+            --title "$EXAMPLE chip $VERSION" \
+            --notes "Wokwi custom chip for \`$EXAMPLE\`, version \`$VERSION\`.
+
+          Pin in \`diagram.json\`:
+
+          \`\`\`json
+          \"dependencies\": { \"$KEY\": \"github:${{ github.repository }}@$RELEASE_TAG\" }
+          \`\`\`"
+
+      - name: Pin the released tag in the viewer diagram
+        run: |
+          DIAGRAM="wokwi/$EXAMPLE/diagram.json"
+          if [ ! -f "$DIAGRAM" ]; then
+            echo "::warning::wokwi/$EXAMPLE/diagram.json does not exist yet; run 'just build $EXAMPLE' and re-run this workflow to pin $RELEASE_TAG"
+            exit 0
+          fi
+
+          KEY="$(./scripts/chip-version.sh name "$EXAMPLE")"
+          python3 - "$DIAGRAM" "$KEY" "github:${{ github.repository }}@$RELEASE_TAG" <<'PY'
+          import json, sys
+          path, key, value = sys.argv[1:4]
+          with open(path, encoding="utf-8") as f:
+              diagram = json.load(f)
+          deps = diagram.get("dependencies")
+          if not isinstance(deps, dict):
+              deps = {}
+          deps[key] = value
+          diagram["dependencies"] = deps
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump(diagram, f, indent=2)
+              f.write("\n")
+          print(f"pinned {key} -> {value}")
+          PY
+
+      - name: Commit the pin
+        run: |
+          [ -f "wokwi/$EXAMPLE/diagram.json" ] || exit 0
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          ./scripts/generate-readme.sh
+
+          git add "wokwi/$EXAMPLE/diagram.json" README.md
+          if git diff --staged --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "chore($EXAMPLE): pin chip $RELEASE_TAG"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
