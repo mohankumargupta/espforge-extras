@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
-# scripts/chip-version.sh — single source of truth for chip part types and release tags.
-#
-# Chip tags look like:  chip-<example>-<major>.<minor>.<patch>
-# First release is 0.0.1; every later release bumps the patch of the highest existing tag.
+# scripts/chip-version.sh — single source of truth for universal chip versioning.
+# Tracks global version in version.txt and increments patch on each release (v0.0.1, v0.0.2, ...).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REPO_SLUG="${GITHUB_REPO:-mohankumargupta/espforge-extras}"
-
-# Dependency key used in diagram.json for the chip part.
-#   part-type -> "chip-chip"   (what third-party Wokwi chips do: key == part type)
-#   name      -> "chip"        (legacy behaviour of the old scripts; fallback only)
+VERSION_FILE="$ROOT_DIR/version.txt"
 CHIP_KEY_MODE="${CHIP_KEY_MODE:-part-type}"
 
 die() { printf 'chip-version: %s\n' "$*" >&2; exit 1; }
@@ -21,7 +15,6 @@ validate_example() {
     esac
 }
 
-# wokwi/ wins because that is the copy the viewer actually reads.
 diagram_path() {
     local ex="$1"
     if [ -f "$ROOT_DIR/wokwi/$ex/diagram.json" ]; then
@@ -33,7 +26,6 @@ diagram_path() {
     fi
 }
 
-# Prints "chip-<name>" from the first chip part in the diagram, empty if none.
 part_type() {
     python3 - "$1" <<'PY'
 import json, sys
@@ -56,6 +48,49 @@ chip_key() {
     fi
 }
 
+cmd_fetch() {
+    git -C "$ROOT_DIR" fetch --tags --force --quiet 2>/dev/null || true
+}
+
+cmd_current() {
+    if [ -f "$VERSION_FILE" ]; then
+        cat "$VERSION_FILE" | tr -d '[:space:]'
+    else
+        printf 'v0.0.0\n'
+    fi
+}
+
+cmd_set() {
+    local new_ver="${1:-}"
+    [ -n "$new_ver" ] || die "missing version argument for set"
+    echo "$new_ver" > "$VERSION_FILE"
+}
+
+# Computes the next universal semver (e.g. v0.0.0 -> v0.0.1)
+# Also validates against existing git tags to prevent collisions.
+cmd_next() {
+    local cur
+    cur="$(cmd_current)"
+    cur="${cur#v}" # strip leading 'v'
+
+    local major minor patch
+    IFS=. read -r major minor patch <<< "$cur"
+    major="${major:-0}"
+    minor="${minor:-0}"
+    patch="${patch:-0}"
+
+    local next_patch=$((patch + 1))
+    local candidate="v${major}.${minor}.${next_patch}"
+
+    # If the candidate tag already exists in git, keep incrementing
+    while git -C "$ROOT_DIR" rev-parse -q --verify "refs/tags/${candidate}" >/dev/null 2>&1; do
+        next_patch=$((next_patch + 1))
+        candidate="v${major}.${minor}.${next_patch}"
+    done
+
+    printf '%s\n' "$candidate"
+}
+
 cmd_name() {
     local ex="${1:-}"
     validate_example "$ex"
@@ -65,53 +100,10 @@ cmd_name() {
     chip_key "$kind"
 }
 
-cmd_fetch() {
-    git -C "$ROOT_DIR" fetch --tags --force --quiet
-}
-
-# Highest released version ("0.0.10"), empty when the chip has never been released.
-cmd_latest() {
-    local ex="${1:-}"
-    validate_example "$ex"
-    local prefix="chip-$ex-"
-    # Strict on purpose: only chip-<example>-<major>.<minor>.<patch>.
-    # Legacy 'v'-prefixed tags are ignored so the series cannot jump 0.0.N -> 1.0.N.
-    git -C "$ROOT_DIR" tag -l "${prefix}*" \
-        | sed -E "s/^${prefix}//" \
-        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-        | sort -V \
-        | tail -n 1 \
-        || true
-}
-
-cmd_latest_tag() {
-    local ex="${1:-}" version
-    version="$(cmd_latest "$ex")"
-    [ -n "$version" ] || return 0
-    printf 'chip-%s-%s\n' "$ex" "$version"
-}
-
-# Next version to publish: 0.0.1 when none exists, otherwise patch + 1.
-cmd_next() {
-    local ex="${1:-}" latest major minor patch
-    latest="$(cmd_latest "$ex")"
-    if [ -z "$latest" ]; then
-        printf '0.0.1\n'
-        return 0
-    fi
-    IFS=. read -r major minor patch <<< "$latest"
-    printf '%s.%s.%s\n' "$major" "$minor" "$((patch + 1))"
-}
-
-cmd_next_tag() {
-    printf 'chip-%s-%s\n' "${1:-}" "$(cmd_next "${1:-}")"
-}
-
 cmd_exists() {
     git -C "$ROOT_DIR" rev-parse -q --verify "refs/tags/${1:-}" >/dev/null 2>&1
 }
 
-# Tag currently pinned in the diagram, empty when dependencies is empty.
 cmd_pinned() {
     local ex="${1:-}" key
     validate_example "$ex"
@@ -129,27 +121,23 @@ cmd="${1:-}"
 shift || true
 case "$cmd" in
     fetch)      cmd_fetch ;;
-    latest)     cmd_latest "$@" ;;
-    latest-tag) cmd_latest_tag "$@" ;;
-    next)       cmd_next "$@" ;;
-    next-tag)   cmd_next_tag "$@" ;;
+    current)    cmd_current ;;
+    set)        cmd_set "$@" ;;
+    next)       cmd_next ;;
     name)       cmd_name "$@" ;;
     pinned)     cmd_pinned "$@" ;;
     exists)     cmd_exists "$@" ;;
     *)
         cat >&2 <<'USAGE'
-usage: scripts/chip-version.sh <command> [example|tag]
+usage: scripts/chip-version.sh <command> [args]
 
-  fetch                  fetch all tags from origin
-  latest <ex>            highest released version, empty if never released
-  latest-tag <ex>        "chip-<ex>-<version>", empty if never released
-  next <ex>              version the next release must use
-  next-tag <ex>          full tag the next release must use
-  name <ex>              dependency key for the example's chip part
-  pinned <ex>            tag pinned in the example's diagram, empty if none
-  exists <tag>           exit 0 if the tag exists locally
-
-  env: CHIP_KEY_MODE=part-type|name (default part-type), GITHUB_REPO=owner/repo
+  fetch         fetch tags from origin
+  current       print current version from version.txt
+  next          compute next universal version (e.g. v0.0.1)
+  set <ver>     write version to version.txt
+  name <ex>     dependency key for the example's chip part
+  pinned <ex>   tag currently pinned in the example's diagram.json
+  exists <tag>  exit 0 if git tag exists
 USAGE
         exit 2
         ;;

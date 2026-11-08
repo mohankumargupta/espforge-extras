@@ -11,9 +11,9 @@ on:
 permissions:
   contents: write
 
-# Two dispatches for the same chip must not compute the same next tag.
+# Prevent concurrent releases from competing for the same next universal tag
 concurrency:
-  group: release-chip-${{ inputs.example }}
+  group: release-chip-universal
   cancel-in-progress: false
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # required: tag lookup needs the full tag list
+          fetch-depth: 0
 
       - name: Validate input and locate chip sources
         run: |
@@ -42,18 +42,15 @@ jobs:
           echo "CHIP_DIR=$DIR" >> "$GITHUB_ENV"
           echo "✓ chip sources: $DIR"
 
-      - name: Compute next version from existing chip tags
+      - name: Compute next universal version
         run: |
           chmod +x scripts/chip-version.sh
           ./scripts/chip-version.sh fetch
 
-          VERSION="$(./scripts/chip-version.sh next "$EXAMPLE")"
+          VERSION="$(./scripts/chip-version.sh next)"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "RELEASE_TAG=chip-${EXAMPLE}-${VERSION}" >> "$GITHUB_ENV"
-
-          echo "existing chip tags for $EXAMPLE:"
-          git tag -l "chip-${EXAMPLE}-*" | sort -V | sed 's/^/  /' || true
-          echo "→ next tag: chip-${EXAMPLE}-${VERSION}"
+          echo "RELEASE_TAG=$VERSION" >> "$GITHUB_ENV"
+          echo "→ next universal tag: $VERSION"
 
       - name: Create tag and release with chip.zip
         env:
@@ -61,10 +58,11 @@ jobs:
         run: |
           ( cd "$CHIP_DIR" && zip -j "$GITHUB_WORKSPACE/chip.zip" chip.json chip.wasm )
           KEY="$(./scripts/chip-version.sh name "$EXAMPLE")"
+
           gh release create "$RELEASE_TAG" "$GITHUB_WORKSPACE/chip.zip" \
             --target "$GITHUB_SHA" \
             --title "$EXAMPLE chip $VERSION" \
-            --notes "Wokwi custom chip for \`$EXAMPLE\`, version \`$VERSION\`.
+            --notes "Wokwi custom chip for \`$EXAMPLE\` (universal version \`$VERSION\`).
 
           Pin in \`diagram.json\`:
 
@@ -72,11 +70,16 @@ jobs:
           \"dependencies\": { \"$KEY\": \"github:${{ github.repository }}@$RELEASE_TAG\" }
           \`\`\`"
 
-      - name: Pin the released tag in the viewer diagram
+      - name: Update version.txt
+        run: |
+          ./scripts/chip-version.sh set "$VERSION"
+          echo "✓ Updated version.txt to $VERSION"
+
+      - name: Pin the released tag in diagram.json
         run: |
           DIAGRAM="wokwi/$EXAMPLE/diagram.json"
           if [ ! -f "$DIAGRAM" ]; then
-            echo "::warning::wokwi/$EXAMPLE/diagram.json does not exist yet; run 'just build $EXAMPLE' and re-run this workflow to pin $RELEASE_TAG"
+            echo "::warning::wokwi/$EXAMPLE/diagram.json not found; skipping diagram pin."
             exit 0
           fi
 
@@ -97,19 +100,18 @@ jobs:
           print(f"pinned {key} -> {value}")
           PY
 
-      - name: Commit the pin
+      - name: Update root README.md and commit changes
         run: |
-          [ -f "wokwi/$EXAMPLE/diagram.json" ] || exit 0
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          chmod +x scripts/generate-readme.sh
           ./scripts/generate-readme.sh
 
-          git add "wokwi/$EXAMPLE/diagram.json" README.md
+          git add version.txt "wokwi/$EXAMPLE/diagram.json" README.md
           if git diff --staged --quiet; then
             echo "nothing to commit"
           else
-            git commit -m "chore($EXAMPLE): pin chip $RELEASE_TAG"
+            git commit -m "chore($EXAMPLE): release chip $RELEASE_TAG and update README"
             git push origin "HEAD:${{ github.ref_name }}"
           fi
