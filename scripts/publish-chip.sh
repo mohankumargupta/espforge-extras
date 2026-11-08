@@ -29,53 +29,63 @@ if [ ! -d "$TARGET_REPO_DIR/.git" ]; then
     exit 1
 fi
 
+if ! command -v gh >/dev/null 2>&1; then
+    echo "❌ Error: 'gh' (GitHub CLI) is required to publish releases." >&2
+    exit 1
+fi
+
 TAG="$EXAMPLE"
 
 echo "==> Publishing chip for '$EXAMPLE' to '$TARGET_REPO_DIR'..."
 
-# 1. Copy chip.json and chip.wasm to root of target repo
+# 1. Copy files to root of local espforge-wokwi
 cp -f "$SOURCE_DIR/chip.json" "$TARGET_REPO_DIR/chip.json"
 cp -f "$SOURCE_DIR/chip.wasm" "$TARGET_REPO_DIR/chip.wasm"
 
+# 2. Package chip.zip (required by Wokwi)
+ZIP_FILE="/tmp/${EXAMPLE}-chip.zip"
+rm -f "$ZIP_FILE"
+( cd "$SOURCE_DIR" && zip -j "$ZIP_FILE" chip.json chip.wasm )
+
 cd "$TARGET_REPO_DIR"
 
-# 2. Stage and commit
+# 3. Stage and commit files to repo
 git add chip.json chip.wasm
-
 if git diff --staged --quiet; then
-    echo "  • No changes in chip.json or chip.wasm (already at latest commit)."
+    echo "  • No changes in chip.json/chip.wasm."
 else
     git commit -m "chip($EXAMPLE): update chip assets"
 fi
 
-# Push current branch
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$CURRENT_BRANCH" != "HEAD" ]; then
     echo "  • Pushing branch '$CURRENT_BRANCH' to origin..."
     git push origin "$CURRENT_BRANCH"
 fi
 
-# 3. Delete previous tag if it exists (both remotely and locally)
-if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "refs/tags/$TAG"; then
-    echo "  • Deleting remote tag '$TAG' from origin..."
-    git push origin --delete "$TAG" || git push origin ":refs/tags/$TAG"
-fi
+# 4. Delete existing release and tag both locally and remotely
+echo "  • Cleaning up previous release & tag '$TAG' if present..."
+gh release delete "$TAG" --repo "$WOKWI_REPO" --yes 2>/dev/null || true
+git push origin --delete "$TAG" 2>/dev/null || true
+git tag -d "$TAG" 2>/dev/null || true
 
-if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
-    echo "  • Deleting local tag '$TAG'..."
-    git tag -d "$TAG"
-fi
-
-# 4. Re-add tag locally and push to origin
-echo "  • Creating local tag '$TAG'..."
+# 5. Create local tag and push to GitHub
+echo "  • Tagging '$TAG'..."
 git tag "$TAG"
-
-echo "  • Pushing tag '$TAG' to origin..."
 git push origin "$TAG"
 
-echo "✓ Published tag '$TAG' on $WOKWI_REPO"
+# 6. Create GitHub Release with chip.zip asset
+echo "  • Creating GitHub Release with chip.zip..."
+gh release create "$TAG" "$ZIP_FILE#chip.zip" \
+    --repo "$WOKWI_REPO" \
+    --title "$TAG" \
+    --notes "Wokwi custom chip for \`$EXAMPLE\`"
 
-# 5. Pin the dependency in wokwi/<example>/diagram.json
+rm -f "$ZIP_FILE"
+
+echo "✓ Successfully published '$TAG' release with chip.zip to $WOKWI_REPO"
+
+# 7. Pin the dependency in wokwi/<example>/diagram.json
 cd "$ROOT_DIR"
 DIAGRAM="$ROOT_DIR/wokwi/$EXAMPLE/diagram.json"
 if [ -f "$DIAGRAM" ]; then
