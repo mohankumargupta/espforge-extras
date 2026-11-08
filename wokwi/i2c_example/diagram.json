@@ -110,6 +110,6 @@
     ]
   ],
   "dependencies": {
-    "chip-chip": "github:mohankumargupta/espforge-wokwi@i2c_example"
+    "chip-chip": "github:mohankumargupta/espforge-wokwi@0.0.1"
   }
 }

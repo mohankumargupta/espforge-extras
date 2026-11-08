@@ -51,11 +51,11 @@ save_firmware_image() {
 inject_chip_dependency() {
     local diagram_file="$1"
     local repo="$2"
-    local tag="$3"
+    local version="$3"
 
-    python3 - "$diagram_file" "$repo" "$tag" <<'PY'
+    python3 - "$diagram_file" "$repo" "$version" <<'PY'
 import json, sys
-path, repo, tag = sys.argv[1:4]
+path, repo, version = sys.argv[1:4]
 with open(path, encoding="utf-8") as f:
     diagram = json.load(f)
 
@@ -70,13 +70,26 @@ if chip_key:
     deps = diagram.get("dependencies")
     if not isinstance(deps, dict):
         deps = {}
-    deps[chip_key] = f"github:{repo}@{tag}"
+    deps[chip_key] = f"github:{repo}@{version}"
     diagram["dependencies"] = deps
     with open(path, "w", encoding="utf-8") as f:
         json.dump(diagram, f, indent=2)
         f.write("\n")
-    print(f"    ↳ chip pinned: {chip_key} -> github:{repo}@{tag}")
+    print(f"    ↳ chip pinned: {chip_key} -> github:{repo}@{version}")
 PY
+}
+
+example_to_clean_version() {
+    case "$1" in
+        i2c_example)        echo "0.0.1" ;;
+        i2c_example_async)  echo "0.0.2" ;;
+        i2c_scanner)        echo "0.0.3" ;;
+        spi_example)        echo "0.0.4" ;;
+        spi_example_async)  echo "0.0.5" ;;
+        uart_example)       echo "0.0.6" ;;
+        uart_example_async) echo "0.0.7" ;;
+        *)                  echo "0.0.99" ;;
+    esac
 }
 
 START_TOTAL=$(date +%s)
@@ -131,9 +144,10 @@ for example in "${EXAMPLES[@]}"; do
     fi
     cp -f "$BUILD_DIR/diagram.json" "$DEST/diagram.json"
 
-    # Inject Wokwi chip dependency pointing to espforge-wokwi@<example>
+    # Inject Wokwi chip dependency pointing to espforge-wokwi@X.Y.Z (without 'v')
     if [ -f "$BUILD_DIR/chip.json" ] && [ -f "$BUILD_DIR/chip.wasm" ]; then
-        inject_chip_dependency "$DEST/diagram.json" "$WOKWI_CHIP_REPO" "$example"
+        CLEAN_VER="$(example_to_clean_version "$example")"
+        inject_chip_dependency "$DEST/diagram.json" "$WOKWI_CHIP_REPO" "$CLEAN_VER"
     fi
 
     EX_ELAPSED=$(( $(date +%s) - EX_START ))

@@ -34,9 +34,22 @@ if ! command -v gh >/dev/null 2>&1; then
     exit 1
 fi
 
-TAG="$EXAMPLE"
+# Deterministic SemVer tag mapping
+case "$EXAMPLE" in
+    i2c_example)        TAG="v0.0.1" ;;
+    i2c_example_async)  TAG="v0.0.2" ;;
+    i2c_scanner)        TAG="v0.0.3" ;;
+    spi_example)        TAG="v0.0.4" ;;
+    spi_example_async)  TAG="v0.0.5" ;;
+    uart_example)       TAG="v0.0.6" ;;
+    uart_example_async) TAG="v0.0.7" ;;
+    *)                  TAG="v0.0.99" ;;
+esac
 
-echo "==> Publishing chip for '$EXAMPLE' to '$TARGET_REPO_DIR'..."
+# Wokwi diagram.json requires normalized SemVer without the 'v'
+WOKWI_VER="${TAG#v}"
+
+echo "==> Publishing '$EXAMPLE' (Git tag: '$TAG', Wokwi pin: '$WOKWI_VER') to '$TARGET_REPO_DIR'..."
 
 # 1. Copy files to root of local espforge-wokwi
 cp -f "$SOURCE_DIR/chip.json" "$TARGET_REPO_DIR/chip.json"
@@ -54,7 +67,7 @@ git add chip.json chip.wasm
 if git diff --staged --quiet; then
     echo "  • No changes in chip.json/chip.wasm."
 else
-    git commit -m "chip($EXAMPLE): update chip assets"
+    git commit -m "chip($EXAMPLE): update assets ($TAG)"
 fi
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -64,12 +77,12 @@ if [ "$CURRENT_BRANCH" != "HEAD" ]; then
 fi
 
 # 4. Delete existing release and tag both locally and remotely
-echo "  • Cleaning up previous release & tag '$TAG' if present..."
+echo "  • Cleaning up previous release & tag '$TAG'..."
 gh release delete "$TAG" --repo "$WOKWI_REPO" --yes 2>/dev/null || true
 git push origin --delete "$TAG" 2>/dev/null || true
 git tag -d "$TAG" 2>/dev/null || true
 
-# 5. Create local tag and push to GitHub
+# 5. Create local tag and push
 echo "  • Tagging '$TAG'..."
 git tag "$TAG"
 git push origin "$TAG"
@@ -78,14 +91,14 @@ git push origin "$TAG"
 echo "  • Creating GitHub Release with chip.zip..."
 gh release create "$TAG" "$ZIP_FILE#chip.zip" \
     --repo "$WOKWI_REPO" \
-    --title "$TAG" \
+    --title "$TAG ($EXAMPLE)" \
     --notes "Wokwi custom chip for \`$EXAMPLE\`"
 
 rm -f "$ZIP_FILE"
 
-echo "✓ Successfully published '$TAG' release with chip.zip to $WOKWI_REPO"
+echo "✓ Successfully published '$TAG' to $WOKWI_REPO"
 
-# 7. Pin the dependency in wokwi/<example>/diagram.json
+# 7. Pin the dependency in wokwi/<example>/diagram.json using clean SemVer
 cd "$ROOT_DIR"
 DIAGRAM="$ROOT_DIR/wokwi/$EXAMPLE/diagram.json"
 if [ -f "$DIAGRAM" ]; then
@@ -101,7 +114,7 @@ for part in diagram.get("parts", []):
 PY
 )
     if [ -n "$KEY" ]; then
-        python3 - "$DIAGRAM" "$KEY" "github:$WOKWI_REPO@$TAG" <<'PY'
+        python3 - "$DIAGRAM" "$KEY" "github:$WOKWI_REPO@$WOKWI_VER" <<'PY'
 import json, sys
 path, key, value = sys.argv[1:4]
 with open(path, encoding="utf-8") as f:

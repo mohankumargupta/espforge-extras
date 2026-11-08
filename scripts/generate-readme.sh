@@ -32,10 +32,10 @@ for dir in "$EXAMPLES_DIR"/*/ ; do
 
     if [ -f "$EXAMPLES_DIR/$example/chip.json" ] && [ -f "$EXAMPLES_DIR/$example/chip.wasm" ]; then
         IS_CHIP=1
-        PINNED_TAG=""
+        PINNED_VER=""
 
         if [ -f "$DIAGRAM_FILE" ]; then
-            PINNED_TAG=$(python3 - "$DIAGRAM_FILE" <<'PY' 2>/dev/null || true
+            PINNED_VER=$(python3 - "$DIAGRAM_FILE" <<'PY' 2>/dev/null || true
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as f:
@@ -50,8 +50,9 @@ PY
 )
         fi
 
-        if [ -n "$PINNED_TAG" ]; then
-            CHIP_CELL="[\`$PINNED_TAG\`](https://github.com/${WOKWI_CHIP_REPO}/tree/${PINNED_TAG})"
+        if [ -n "$PINNED_VER" ]; then
+            TAG="v${PINNED_VER#v}"
+            CHIP_CELL="[\`$PINNED_VER\`](https://github.com/${WOKWI_CHIP_REPO}/releases/tag/${TAG})"
         else
             CHIP_CELL="not pinned"
             CHIP_READY=0

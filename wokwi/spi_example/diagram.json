@@ -71,6 +71,6 @@
     ]
   ],
   "dependencies": {
-    "chip-chip": "github:mohankumargupta/espforge-wokwi@spi_example"
+    "chip-chip": "github:mohankumargupta/espforge-wokwi@0.0.4"
   }
 }
