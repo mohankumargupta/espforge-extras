@@ -4,10 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WOKWI_DIR="$ROOT_DIR/wokwi"
 ESPFORGE_BIN="${ESPFORGE_BIN:-espforge}"
-export GITHUB_REPO="${GITHUB_REPO:-mohankumargupta/espforge-extras}"
-CHIP_HELPER="$ROOT_DIR/scripts/chip-version.sh"
+WOKWI_CHIP_REPO="${WOKWI_CHIP_REPO:-mohankumargupta/espforge-wokwi}"
 
-# 1. Parse arguments: [example_name] [build_dir]
+# Parse arguments: [example_name] [build_dir]
 EXAMPLE_ARG="${1:-}"
 BUILD_DIR="${2:-${BUILD_DIR:-/tmp/espforgedemo}}"
 
@@ -37,11 +36,6 @@ else
     EXAMPLES=($("$ESPFORGE_BIN" examples --list))
 fi
 
-# The pin must be a tag that exists on origin; stale local tags would pin an old chip.
-if [ "${CHIP_OFFLINE:-0}" != "1" ]; then
-    "$CHIP_HELPER" fetch 2>/dev/null || echo "  ! could not fetch tags; chip pins may be stale" >&2
-fi
-
 mkdir -p "$BUILD_DIR" "$WOKWI_DIR"
 
 save_firmware_image() {
@@ -55,21 +49,33 @@ save_firmware_image() {
 }
 
 inject_chip_dependency() {
-    local diagram_file="$1" repo="$2" tag="$3" key="$4"
+    local diagram_file="$1"
+    local repo="$2"
+    local tag="$3"
 
-    python3 - "$diagram_file" "$repo" "$tag" "$key" <<'PY'
+    python3 - "$diagram_file" "$repo" "$tag" <<'PY'
 import json, sys
-path, repo, tag, key = sys.argv[1:5]
+path, repo, tag = sys.argv[1:4]
 with open(path, encoding="utf-8") as f:
     diagram = json.load(f)
-deps = diagram.get("dependencies")
-if not isinstance(deps, dict):
-    deps = {}
-deps[key] = f"github:{repo}@{tag}"
-diagram["dependencies"] = deps
-with open(path, "w", encoding="utf-8") as f:
-    json.dump(diagram, f, indent=2)
-    f.write("\n")
+
+chip_key = None
+for part in diagram.get("parts", []):
+    kind = part.get("type", "")
+    if kind.startswith("chip-"):
+        chip_key = kind
+        break
+
+if chip_key:
+    deps = diagram.get("dependencies")
+    if not isinstance(deps, dict):
+        deps = {}
+    deps[chip_key] = f"github:{repo}@{tag}"
+    diagram["dependencies"] = deps
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(diagram, f, indent=2)
+        f.write("\n")
+    print(f"    ↳ chip pinned: {chip_key} -> github:{repo}@{tag}")
 PY
 }
 
@@ -82,10 +88,7 @@ for example in "${EXAMPLES[@]}"; do
     echo -n "  • [$example] "
     DEST="$WOKWI_DIR/$example"
 
-    # Resolve the chip pin before the build output replaces the checked-in diagram.
-    CHIP_TAG="$("$CHIP_HELPER" latest-tag "$example" || true)"
-
-    # Preserve build cache
+    # Preserve build cache (target/) across iterations
     find "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name 'target' -exec rm -rf {} +
 
     if ! "$ESPFORGE_BIN" gen --example "$example" --out "$BUILD_DIR" >"$BUILD_DIR/.gen.log" 2>&1; then
@@ -121,8 +124,6 @@ for example in "${EXAMPLES[@]}"; do
         continue
     fi
 
-    # Viewer payload only: diagram.json + firmware.bin.
-    # chip.json / chip.wasm / wokwi.toml stay in espforge-examples-generated/<example>/.
     if [ ! -f "$BUILD_DIR/diagram.json" ]; then
         echo "✗ diagram.json missing from build output"
         FAILED=$((FAILED + 1))
@@ -130,15 +131,9 @@ for example in "${EXAMPLES[@]}"; do
     fi
     cp -f "$BUILD_DIR/diagram.json" "$DEST/diagram.json"
 
+    # Inject Wokwi chip dependency pointing to espforge-wokwi@<example>
     if [ -f "$BUILD_DIR/chip.json" ] && [ -f "$BUILD_DIR/chip.wasm" ]; then
-        if [ -n "$CHIP_TAG" ]; then
-            CHIP_KEY="$("$CHIP_HELPER" name "$example")"
-            inject_chip_dependency "$DEST/diagram.json" "$GITHUB_REPO" "$CHIP_TAG" "$CHIP_KEY"
-            echo "    ↳ chip pinned to $CHIP_TAG"
-        else
-            echo "    ↳ chip example, never released: dependencies left empty"
-            echo "      run 'just release-chip $example' to publish 0.0.1, then rebuild"
-        fi
+        inject_chip_dependency "$DEST/diagram.json" "$WOKWI_CHIP_REPO" "$example"
     fi
 
     EX_ELAPSED=$(( $(date +%s) - EX_START ))
@@ -154,5 +149,4 @@ if [ "$FAILED" -gt 0 ]; then
     exit 1
 fi
 
-# Update README.md with the simulation links
 "$ROOT_DIR/scripts/generate-readme.sh"

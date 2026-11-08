@@ -6,12 +6,9 @@ EXAMPLES_DIR="$ROOT_DIR/espforge-examples-generated"
 WOKWI_DIR="$ROOT_DIR/wokwi"
 README_OUT="$ROOT_DIR/README.md"
 REPO_RAW_BASE="https://raw.githubusercontent.com/mohankumargupta/espforge-extras/refs/heads/main"
+WOKWI_CHIP_REPO="${WOKWI_CHIP_REPO:-mohankumargupta/espforge-wokwi}"
 
 echo "==> Generating root README.md..."
-
-if [ "${CHIP_OFFLINE:-0}" != "1" ]; then
-    "$ROOT_DIR/scripts/chip-version.sh" fetch 2>/dev/null || true
-fi
 
 cat <<'EOF' > "$README_OUT"
 # espforge-extras
@@ -29,28 +26,41 @@ for dir in "$EXAMPLES_DIR"/*/ ; do
     example="$(basename "$dir")"
     SOURCE_LINK="[\`$example\`](./espforge-examples-generated/$example)"
 
-    # Chip examples resolve their chip through diagram.json -> dependencies -> release asset.
     IS_CHIP=0
-    CHIP_READY=1          # 0 = publish no simulation link for this row
-    PINNED_TAG=""
+    CHIP_READY=1
+    DIAGRAM_FILE="$WOKWI_DIR/$example/diagram.json"
+
     if [ -f "$EXAMPLES_DIR/$example/chip.json" ] && [ -f "$EXAMPLES_DIR/$example/chip.wasm" ]; then
         IS_CHIP=1
-        PINNED_TAG="$("$ROOT_DIR/scripts/chip-version.sh" pinned "$example" 2>/dev/null || true)"
-        if [ -z "$PINNED_TAG" ]; then
+        PINNED_TAG=""
+
+        if [ -f "$DIAGRAM_FILE" ]; then
+            PINNED_TAG=$(python3 - "$DIAGRAM_FILE" <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        diagram = json.load(f)
+    for _, dep in diagram.get("dependencies", {}).items():
+        if "espforge-wokwi@" in dep:
+            print(dep.split("@", 1)[1])
+            break
+except Exception:
+    pass
+PY
+)
+        fi
+
+        if [ -n "$PINNED_TAG" ]; then
+            CHIP_CELL="[\`$PINNED_TAG\`](https://github.com/${WOKWI_CHIP_REPO}/tree/${PINNED_TAG})"
+        else
             CHIP_CELL="not pinned"
             CHIP_READY=0
-        elif ! "$ROOT_DIR/scripts/chip-version.sh" exists "$PINNED_TAG" 2>/dev/null; then
-            CHIP_CELL="⚠️ \`$PINNED_TAG\` missing"
-            CHIP_READY=0
-        else
-            CHIP_CELL="[\`$PINNED_TAG\`](https://github.com/mohankumargupta/espforge-extras/releases/tag/$PINNED_TAG)"
         fi
     else
         CHIP_CELL="—"
     fi
 
-    if [ -f "$WOKWI_DIR/$example/firmware.bin" ] && [ -f "$WOKWI_DIR/$example/diagram.json" ] \
-       && [ "$CHIP_READY" -eq 1 ]; then
+    if [ -f "$WOKWI_DIR/$example/firmware.bin" ] && [ -f "$DIAGRAM_FILE" ] && [ "$CHIP_READY" -eq 1 ]; then
         RAW_DIAGRAM="${REPO_RAW_BASE}/wokwi/${example}/diagram.json"
         RAW_FIRMWARE="${REPO_RAW_BASE}/wokwi/${example}/firmware.bin"
 
