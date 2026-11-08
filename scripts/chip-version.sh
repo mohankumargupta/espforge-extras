@@ -117,6 +117,24 @@ print(value.split("@", 1)[1] if "@" in value else "")
 PY
 }
 
+# Tag to pin for an example: the last universal chip release, or the tag that is
+# already pinned there when no universal release has been tagged yet.
+cmd_latest_tag() {
+    local ex="${1:-}" tag
+    validate_example "$ex"
+
+    tag="$(cmd_current)"
+    if [ "$tag" != "v0.0.0" ] && cmd_exists "$tag"; then
+        printf '%s\n' "$tag"
+        return 0
+    fi
+
+    tag="$(cmd_pinned "$ex" 2>/dev/null || true)"
+    if [ -n "$tag" ] && cmd_exists "$tag"; then
+        printf '%s\n' "$tag"
+    fi
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
@@ -126,6 +144,7 @@ case "$cmd" in
     next)       cmd_next ;;
     name)       cmd_name "$@" ;;
     pinned)     cmd_pinned "$@" ;;
+    latest-tag) cmd_latest_tag "$@" ;;
     exists)     cmd_exists "$@" ;;
     *)
         cat >&2 <<'USAGE'
@@ -137,6 +156,8 @@ usage: scripts/chip-version.sh <command> [args]
   set <ver>     write version to version.txt
   name <ex>     dependency key for the example's chip part
   pinned <ex>   tag currently pinned in the example's diagram.json
+  latest-tag <ex>
+                tag to pin: last universal release, else the current pin
   exists <tag>  exit 0 if git tag exists
 USAGE
         exit 2

@@ -82,6 +82,9 @@ for example in "${EXAMPLES[@]}"; do
     echo -n "  • [$example] "
     DEST="$WOKWI_DIR/$example"
 
+    # Resolve the chip pin before the build output replaces the checked-in diagram.
+    CHIP_TAG="$("$CHIP_HELPER" latest-tag "$example" || true)"
+
     # Preserve build cache
     find "$BUILD_DIR" -mindepth 1 -maxdepth 1 ! -name 'target' -exec rm -rf {} +
 
@@ -128,7 +131,6 @@ for example in "${EXAMPLES[@]}"; do
     cp -f "$BUILD_DIR/diagram.json" "$DEST/diagram.json"
 
     if [ -f "$BUILD_DIR/chip.json" ] && [ -f "$BUILD_DIR/chip.wasm" ]; then
-        CHIP_TAG="$("$CHIP_HELPER" latest-tag "$example" || true)"
         if [ -n "$CHIP_TAG" ]; then
             CHIP_KEY="$("$CHIP_HELPER" name "$example")"
             inject_chip_dependency "$DEST/diagram.json" "$GITHUB_REPO" "$CHIP_TAG" "$CHIP_KEY"
