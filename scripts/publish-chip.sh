@@ -51,19 +51,22 @@ WOKWI_VER="${TAG#v}"
 
 echo "==> Publishing '$EXAMPLE' (Git tag: '$TAG', Wokwi pin: '$WOKWI_VER') to '$TARGET_REPO_DIR'..."
 
-# 1. Copy files to root of local espforge-wokwi
+# 1. Copy files to root and dist/ of local espforge-wokwi
+mkdir -p "$TARGET_REPO_DIR/dist"
 cp -f "$SOURCE_DIR/chip.json" "$TARGET_REPO_DIR/chip.json"
 cp -f "$SOURCE_DIR/chip.wasm" "$TARGET_REPO_DIR/chip.wasm"
+cp -f "$SOURCE_DIR/chip.json" "$TARGET_REPO_DIR/dist/chip.json"
+cp -f "$SOURCE_DIR/chip.wasm" "$TARGET_REPO_DIR/dist/chip.wasm"
 
-# 2. Package chip.zip (required by Wokwi)
+# 2. Package chip.zip (required by Wokwi release loader)
 ZIP_FILE="/tmp/${EXAMPLE}-chip.zip"
 rm -f "$ZIP_FILE"
 ( cd "$SOURCE_DIR" && zip -j "$ZIP_FILE" chip.json chip.wasm )
 
 cd "$TARGET_REPO_DIR"
 
-# 3. Stage and commit files to repo
-git add chip.json chip.wasm
+# 3. Stage and commit files to repo (root + dist/)
+git add chip.json chip.wasm dist/chip.json dist/chip.wasm
 if git diff --staged --quiet; then
     echo "  • No changes in chip.json/chip.wasm."
 else
