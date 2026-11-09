@@ -77,7 +77,7 @@ cp -f "$SOURCE_DIR/chip.wasm" "$TARGET_REPO_DIR/dist/chip.wasm"
 # 2. Package chip.zip (required by Wokwi release loader)
 ZIP_FILE="/tmp/${EXAMPLE}-chip.zip"
 rm -f "$ZIP_FILE"
-( cd "$WOKWI_EX_DIR" && zip -j "$ZIP_FILE" chip.json "$SOURCE_DIR/chip.wasm" )
+( cd "$WOKWI_EX_DIR" && zip -9 "$ZIP_FILE" chip.json "$SOURCE_DIR/chip.wasm" )
 
 cd "$TARGET_REPO_DIR"
 
