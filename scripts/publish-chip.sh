@@ -77,8 +77,12 @@ cp -f "$SOURCE_DIR/chip.wasm" "$TARGET_REPO_DIR/dist/chip.wasm"
 # 2. Package chip.zip (required by Wokwi release loader)
 # Both files must be stored at the archive root: `-j` junks directory paths,
 # otherwise chip.wasm keeps its absolute path inside the zip.
-ZIP_FILE="/tmp/${EXAMPLE}-chip.zip"
-rm -f "$ZIP_FILE"
+# The asset MUST be named exactly `chip.zip` – Wokwi looks that filename up on
+# the release and fails with "Worker exceeded resource limits" when it is
+# missing. Note that `gh release create file#label` only sets the asset *label*,
+# so the local file itself has to be called chip.zip.
+ZIP_DIR="$(mktemp -d)"
+ZIP_FILE="$ZIP_DIR/chip.zip"
 ( cd "$WOKWI_EX_DIR" && zip -9 -j "$ZIP_FILE" chip.json "$SOURCE_DIR/chip.wasm" )
 
 cd "$TARGET_REPO_DIR"
@@ -110,12 +114,12 @@ git push origin "$TAG"
 
 # 6. Create GitHub Release with chip.zip asset
 echo "  • Creating GitHub Release with chip.zip..."
-gh release create "$TAG" "$ZIP_FILE#chip.zip" \
+gh release create "$TAG" "$ZIP_FILE" \
     --repo "$WOKWI_REPO" \
     --title "$TAG" \
     --notes "Wokwi custom chip for \`$EXAMPLE\`"
 
-rm -f "$ZIP_FILE"
+rm -rf "$ZIP_DIR"
 
 echo "✓ Successfully published '$TAG' to $WOKWI_REPO"
 

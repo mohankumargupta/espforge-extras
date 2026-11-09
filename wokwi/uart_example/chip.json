@@ -1,0 +1,9 @@
+{
+  "name": "uartexample",
+  "author": "Raspberry Pi",
+  "pins": [
+    "TX",
+    "RX"
+  ],
+  "controls": []
+}
