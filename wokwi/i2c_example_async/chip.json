@@ -1,0 +1,9 @@
+{
+  "name": "i2cexampleasync",
+  "author": "Raspberry Pi",
+  "pins": [
+    "SDA",
+    "SCL"
+  ],
+  "controls": []
+}
