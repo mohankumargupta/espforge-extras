@@ -110,7 +110,7 @@ git push origin "$TAG"
 echo "  • Creating GitHub Release with chip.zip..."
 gh release create "$TAG" "$ZIP_FILE#chip.zip" \
     --repo "$WOKWI_REPO" \
-    --title "$TAG ($EXAMPLE)" \
+    --title "$TAG" \
     --notes "Wokwi custom chip for \`$EXAMPLE\`"
 
 rm -f "$ZIP_FILE"
