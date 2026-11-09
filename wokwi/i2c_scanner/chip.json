@@ -1,0 +1,9 @@
+{
+  "name": "i2cscanner",
+  "author": "Raspberry Pi",
+  "pins": [
+    "SDA",
+    "SCL"
+  ],
+  "controls": []
+}
