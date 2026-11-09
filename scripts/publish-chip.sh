@@ -144,3 +144,13 @@ with open(path, "w", encoding="utf-8") as f:
 print(f"  • Pinned in diagram: {key} -> {value}")
 PY
 fi
+
+# 8. Sync the target repo with origin so the next publish starts from a fast-forwardable state
+echo "  • Syncing '$TARGET_REPO_DIR' with origin..."
+if [ "$CURRENT_BRANCH" != "HEAD" ]; then
+    if git -C "$TARGET_REPO_DIR" pull --ff-only --tags origin "$CURRENT_BRANCH"; then
+        echo "  • Local target repo is in sync with origin/$CURRENT_BRANCH."
+    else
+        echo "  ⚠️  Could not fast-forward '$TARGET_REPO_DIR'; resolve it manually before the next publish." >&2
+    fi
+fi
