@@ -26,28 +26,6 @@ diagram_path() {
     fi
 }
 
-part_type() {
-    python3 - "$1" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    diagram = json.load(f)
-for part in diagram.get("parts", []):
-    kind = part.get("type", "")
-    if kind.startswith("chip-"):
-        print(kind)
-        break
-PY
-}
-
-chip_key() {
-    local kind="$1"
-    if [ "$CHIP_KEY_MODE" = "name" ]; then
-        printf '%s\n' "${kind#chip-}"
-    else
-        printf '%s\n' "$kind"
-    fi
-}
-
 cmd_fetch() {
     git -C "$ROOT_DIR" fetch --tags --force --quiet 2>/dev/null || true
 }
@@ -94,10 +72,15 @@ cmd_next() {
 cmd_name() {
     local ex="${1:-}"
     validate_example "$ex"
-    local kind
-    kind="$(part_type "$(diagram_path "$ex")")"
-    [ -n "$kind" ] || die "'$ex' has no chip-* part in diagram.json"
-    chip_key "$kind"
+    if [ ! -f "$ROOT_DIR/espforge-examples-generated/$ex/chip.json" ] && [ ! -f "$ROOT_DIR/wokwi/$ex/chip.json" ]; then
+        die "'$ex' is not a chip example"
+    fi
+    local cname="${ex//_/}"
+    if [ "$CHIP_KEY_MODE" = "name" ]; then
+        printf '%s\n' "$cname"
+    else
+        printf 'chip-%s\n' "$cname"
+    fi
 }
 
 cmd_exists() {
@@ -154,7 +137,7 @@ usage: scripts/chip-version.sh <command> [args]
   current       print current version from version.txt
   next          compute next universal version (e.g. v0.0.1)
   set <ver>     write version to version.txt
-  name <ex>     dependency key for the example's chip part
+  name <ex>     dependency key for the example's chip part (e.g. chip-i2cexample)
   pinned <ex>   tag currently pinned in the example's diagram.json
   latest-tag <ex>
                 tag to pin: last universal release, else the current pin

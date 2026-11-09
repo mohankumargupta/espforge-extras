@@ -48,34 +48,53 @@ save_firmware_image() {
     fi
 }
 
+copy_and_rename_chip_json() {
+    local src="$1"
+    local dest="$2"
+    local chip_name="$3"
+
+    python3 - "$src" "$dest" "$chip_name" <<'PY'
+import json, sys
+src, dest, chip_name = sys.argv[1:4]
+with open(src, encoding="utf-8") as f:
+    data = json.load(f)
+data["name"] = chip_name
+with open(dest, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+}
+
 inject_chip_dependency() {
     local diagram_file="$1"
     local repo="$2"
     local version="$3"
+    local chip_name="$4"
 
-    python3 - "$diagram_file" "$repo" "$version" <<'PY'
+    python3 - "$diagram_file" "$repo" "$version" "$chip_name" <<'PY'
 import json, sys
-path, repo, version = sys.argv[1:4]
+path, repo, version, chip_name = sys.argv[1:5]
 with open(path, encoding="utf-8") as f:
     diagram = json.load(f)
 
-chip_key = None
+chip_key = f"chip-{chip_name}"
+
 for part in diagram.get("parts", []):
     kind = part.get("type", "")
     if kind.startswith("chip-"):
-        chip_key = kind
-        break
+        part["type"] = chip_key
 
-if chip_key:
-    deps = diagram.get("dependencies")
-    if not isinstance(deps, dict):
-        deps = {}
-    deps[chip_key] = f"github:{repo}@{version}"
-    diagram["dependencies"] = deps
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(diagram, f, indent=2)
-        f.write("\n")
-    print(f"    ↳ chip pinned: {chip_key} -> github:{repo}@{version}")
+deps = diagram.get("dependencies")
+if not isinstance(deps, dict):
+    deps = {}
+deps.pop("chip-chip", None)
+deps[chip_key] = f"github:{repo}@{version}"
+diagram["dependencies"] = deps
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(diagram, f, indent=2)
+    f.write("\n")
+print(f"    ↳ chip pinned: {chip_key} -> github:{repo}@{version}")
 PY
 }
 
@@ -144,10 +163,12 @@ for example in "${EXAMPLES[@]}"; do
     fi
     cp -f "$BUILD_DIR/diagram.json" "$DEST/diagram.json"
 
-    # Inject Wokwi chip dependency pointing to espforge-wokwi@X.Y.Z (without 'v')
+    # Copy & rename chip.json, and inject Wokwi chip dependency pointing to espforge-wokwi@X.Y.Z
     if [ -f "$BUILD_DIR/chip.json" ] && [ -f "$BUILD_DIR/chip.wasm" ]; then
+        CHIP_NAME="${example//_/}"
+        copy_and_rename_chip_json "$BUILD_DIR/chip.json" "$DEST/chip.json" "$CHIP_NAME"
         CLEAN_VER="$(example_to_clean_version "$example")"
-        inject_chip_dependency "$DEST/diagram.json" "$WOKWI_CHIP_REPO" "$CLEAN_VER"
+        inject_chip_dependency "$DEST/diagram.json" "$WOKWI_CHIP_REPO" "$CLEAN_VER" "$CHIP_NAME"
     fi
 
     EX_ELAPSED=$(( $(date +%s) - EX_START ))

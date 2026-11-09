@@ -56,7 +56,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ( cd "$CHIP_DIR" && zip -j "$GITHUB_WORKSPACE/chip.zip" chip.json chip.wasm )
+          CHIP_NAME="${EXAMPLE//_/}"
+          WOKWI_EX_DIR="wokwi/$EXAMPLE"
+          mkdir -p "$WOKWI_EX_DIR"
+
+          # Ensure wokwi/<example>/chip.json exists with renamed name parameter
+          python3 - "$CHIP_DIR/chip.json" "$WOKWI_EX_DIR/chip.json" "$CHIP_NAME" <<'PY'
+          import json, sys
+          src, dest, chip_name = sys.argv[1:4]
+          with open(src, encoding="utf-8") as f:
+              data = json.load(f)
+          data["name"] = chip_name
+          with open(dest, "w", encoding="utf-8") as f:
+              json.dump(data, f, indent=2)
+              f.write("\n")
+          PY
+
+          ( cd "$WOKWI_EX_DIR" && zip -j "$GITHUB_WORKSPACE/chip.zip" chip.json "$GITHUB_WORKSPACE/$CHIP_DIR/chip.wasm" )
           KEY="$(./scripts/chip-version.sh name "$EXAMPLE")"
 
           gh release create "$RELEASE_TAG" "$GITHUB_WORKSPACE/chip.zip" \
@@ -89,9 +105,15 @@ jobs:
           path, key, value = sys.argv[1:4]
           with open(path, encoding="utf-8") as f:
               diagram = json.load(f)
+
+          for part in diagram.get("parts", []):
+              if part.get("type", "").startswith("chip-"):
+                  part["type"] = key
+
           deps = diagram.get("dependencies")
           if not isinstance(deps, dict):
               deps = {}
+          deps.pop("chip-chip", None)
           deps[key] = value
           diagram["dependencies"] = deps
           with open(path, "w", encoding="utf-8") as f:
@@ -108,7 +130,7 @@ jobs:
           chmod +x scripts/generate-readme.sh
           ./scripts/generate-readme.sh
 
-          git add version.txt "wokwi/$EXAMPLE/diagram.json" README.md
+          git add version.txt "wokwi/$EXAMPLE" README.md
           if git diff --staged --quiet; then
             echo "nothing to commit"
           else

@@ -11,7 +11,7 @@
       "attrs": {}
     },
     {
-      "type": "chip-chip",
+      "type": "chip-i2cexample",
       "id": "chip1",
       "top": 1.02,
       "left": 100.8,
@@ -110,6 +110,6 @@
     ]
   ],
   "dependencies": {
-    "chip-chip": "github:mohankumargupta/espforge-wokwi@0.0.1"
+    "chip-i2cexample": "github:mohankumargupta/espforge-wokwi@0.0.1"
   }
 }

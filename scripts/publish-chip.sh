@@ -13,6 +13,9 @@ if [ -z "$EXAMPLE" ]; then
 fi
 
 SOURCE_DIR="$ROOT_DIR/espforge-examples-generated/$EXAMPLE"
+WOKWI_EX_DIR="$ROOT_DIR/wokwi/$EXAMPLE"
+CHIP_NAME="${EXAMPLE//_/}"
+CHIP_KEY="chip-${CHIP_NAME}"
 
 if [ ! -d "$SOURCE_DIR" ]; then
     echo "❌ Error: Example directory '$SOURCE_DIR' does not exist." >&2
@@ -49,19 +52,32 @@ esac
 # Wokwi diagram.json requires normalized SemVer without the 'v'
 WOKWI_VER="${TAG#v}"
 
-echo "==> Publishing '$EXAMPLE' (Git tag: '$TAG', Wokwi pin: '$WOKWI_VER') to '$TARGET_REPO_DIR'..."
+echo "==> Publishing '$EXAMPLE' (Git tag: '$TAG', Wokwi pin: '$WOKWI_VER', chip key: '$CHIP_KEY') to '$TARGET_REPO_DIR'..."
+
+# Ensure wokwi/<example>/chip.json exists with name renamed to <chip_name>
+mkdir -p "$WOKWI_EX_DIR"
+python3 - "$SOURCE_DIR/chip.json" "$WOKWI_EX_DIR/chip.json" "$CHIP_NAME" <<'PY'
+import json, sys
+src, dest, chip_name = sys.argv[1:4]
+with open(src, encoding="utf-8") as f:
+    data = json.load(f)
+data["name"] = chip_name
+with open(dest, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
 
 # 1. Copy files to root and dist/ of local espforge-wokwi
 mkdir -p "$TARGET_REPO_DIR/dist"
-cp -f "$SOURCE_DIR/chip.json" "$TARGET_REPO_DIR/chip.json"
+cp -f "$WOKWI_EX_DIR/chip.json" "$TARGET_REPO_DIR/chip.json"
 cp -f "$SOURCE_DIR/chip.wasm" "$TARGET_REPO_DIR/chip.wasm"
-cp -f "$SOURCE_DIR/chip.json" "$TARGET_REPO_DIR/dist/chip.json"
+cp -f "$WOKWI_EX_DIR/chip.json" "$TARGET_REPO_DIR/dist/chip.json"
 cp -f "$SOURCE_DIR/chip.wasm" "$TARGET_REPO_DIR/dist/chip.wasm"
 
 # 2. Package chip.zip (required by Wokwi release loader)
 ZIP_FILE="/tmp/${EXAMPLE}-chip.zip"
 rm -f "$ZIP_FILE"
-( cd "$SOURCE_DIR" && zip -j "$ZIP_FILE" chip.json chip.wasm )
+( cd "$WOKWI_EX_DIR" && zip -j "$ZIP_FILE" chip.json "$SOURCE_DIR/chip.wasm" )
 
 cd "$TARGET_REPO_DIR"
 
@@ -105,32 +121,26 @@ echo "✓ Successfully published '$TAG' to $WOKWI_REPO"
 cd "$ROOT_DIR"
 DIAGRAM="$ROOT_DIR/wokwi/$EXAMPLE/diagram.json"
 if [ -f "$DIAGRAM" ]; then
-    KEY=$(python3 - "$DIAGRAM" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    diagram = json.load(f)
-for part in diagram.get("parts", []):
-    kind = part.get("type", "")
-    if kind.startswith("chip-"):
-        print(kind)
-        break
-PY
-)
-    if [ -n "$KEY" ]; then
-        python3 - "$DIAGRAM" "$KEY" "github:$WOKWI_REPO@$WOKWI_VER" <<'PY'
+    python3 - "$DIAGRAM" "$CHIP_KEY" "github:$WOKWI_REPO@$WOKWI_VER" <<'PY'
 import json, sys
 path, key, value = sys.argv[1:4]
 with open(path, encoding="utf-8") as f:
     diagram = json.load(f)
+
+for part in diagram.get("parts", []):
+    if part.get("type", "").startswith("chip-"):
+        part["type"] = key
+
 deps = diagram.get("dependencies")
 if not isinstance(deps, dict):
     deps = {}
+deps.pop("chip-chip", None)
 deps[key] = value
 diagram["dependencies"] = deps
+
 with open(path, "w", encoding="utf-8") as f:
     json.dump(diagram, f, indent=2)
     f.write("\n")
 print(f"  • Pinned in diagram: {key} -> {value}")
 PY
-    fi
 fi
