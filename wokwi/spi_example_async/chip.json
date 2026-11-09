@@ -1,0 +1,11 @@
+{
+  "name": "spiexampleasync",
+  "author": "Raspberry Pi",
+  "pins": [
+    "MISO",
+    "MOSI",
+    "SCK",
+    "CS"
+  ],
+  "controls": []
+}
